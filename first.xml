@@ -1,0 +1,12 @@
+<root>
+  <customers>
+    <customer id="1">
+      <name>John</name>
+      <email>john@example.com</email>
+    </customer>
+    <customer id="2">
+      <name>Mary</name>
+    </customer>
+  </customers>
+  <settings mode="on" />
+</root>

@@ -1,0 +1,11 @@
+<root>
+  <customers>
+    <customer id="1">
+      <name>John</name>
+    </customer>
+    <customer id="3">
+      <name>Sam</name>
+    </customer>
+  </customers>
+  <settings />
+</root>
