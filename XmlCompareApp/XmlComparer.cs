@@ -21,7 +21,8 @@ public sealed record FieldResult(
 
 /// <summary>
 /// Compares the structure of two XML files.
-/// - Elements are matched by name within the same parent (child order is ignored).
+/// - Compares elements recursively by matching child element names (ignoring order).
+/// - Does NOT require parent elements to have matching names.
 /// - Attributes are matched by name.
 /// - Text values and attribute values are NOT compared.
 /// </summary>
@@ -41,12 +42,13 @@ public static class XmlComparer
         XDocument doc1 = XDocument.Load(file1);
         XDocument doc2 = XDocument.Load(file2);
 
-        var root = new Node { Name = string.Empty, Kind = FieldKind.Element };
+        if (doc1.Root is null || doc2.Root is null)
+            throw new InvalidOperationException("Both XML files must have a root element.");
 
-        if (doc1.Root is not null)
-            Merge(root, doc1.Root, 1);
-        if (doc2.Root is not null)
-            Merge(root, doc2.Root, 2);
+        // Start comparison from the roots, regardless of whether their names match
+        var root = new Node { Name = string.Empty, Kind = FieldKind.Element };
+        Merge(root, doc1.Root, 1);
+        Merge(root, doc2.Root, 2);
 
         var results = new List<FieldResult>();
         foreach (var child in root.Children)
