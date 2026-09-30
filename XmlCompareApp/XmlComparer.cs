@@ -20,11 +20,13 @@ public sealed record FieldResult(
 }
 
 /// <summary>
-/// Compares the structure of two XML files.
-/// - Compares elements recursively by matching child element names (ignoring order).
-/// - Does NOT require parent elements to have matching names.
-/// - Attributes are matched by name.
-/// - Text values and attribute values are NOT compared.
+/// Compares XML structure while allowing wrapper levels to be skipped.
+/// Skip 0: compare from the root element.
+/// Skip 1: ignore each root and compare its children.
+/// Skip 2: ignore the root and the first child of each root, then compare
+///         the contents inside those first children. This allows the first
+///         child names to differ between files (for example USER1 and USER2).
+/// Element order, text values, and attribute values are ignored.
 /// </summary>
 public static class XmlComparer
 {
@@ -37,7 +39,7 @@ public static class XmlComparer
         public List<Node> Children { get; } = new();
     }
 
-    public static List<FieldResult> Compare(string file1, string file2)
+    public static List<FieldResult> Compare(string file1, string file2, int skipLevel)
     {
         XDocument doc1 = XDocument.Load(file1);
         XDocument doc2 = XDocument.Load(file2);
@@ -45,19 +47,39 @@ public static class XmlComparer
         if (doc1.Root is null || doc2.Root is null)
             throw new InvalidOperationException("Both XML files must have a root element.");
 
-        // Start comparison from the roots, regardless of whether their names match
-        var root = new Node { Name = string.Empty, Kind = FieldKind.Element };
-        Merge(root, doc1.Root, 1);
-        Merge(root, doc2.Root, 2);
+        if (skipLevel < 0 || skipLevel > 2)
+            throw new ArgumentOutOfRangeException(nameof(skipLevel), "Skip level must be 0, 1, or 2.");
+
+        var combined = new Node { Name = string.Empty, Kind = FieldKind.Element };
+
+        foreach (var element in ElementsToCompare(doc1.Root, skipLevel))
+            Merge(combined, element, 1);
+
+        foreach (var element in ElementsToCompare(doc2.Root, skipLevel))
+            Merge(combined, element, 2);
 
         var results = new List<FieldResult>();
-        foreach (var child in root.Children)
+        foreach (var child in combined.Children)
             Flatten(child, string.Empty, 0, results);
 
         return results;
     }
 
-    // Merges an XML element (and everything inside it) into the combined tree.
+    private static IEnumerable<XElement> ElementsToCompare(XElement root, int skipLevel)
+    {
+        if (skipLevel == 0)
+            return new[] { root };
+
+        // Skip 1: ignore the root and compare all direct root children.
+        if (skipLevel == 1)
+            return root.Elements();
+
+        // Skip 2: ignore the root and the first child wrapper. The wrapper
+        // name may be different in each file, so only its contents are used.
+        XElement? firstChild = root.Elements().FirstOrDefault();
+        return firstChild?.Elements() ?? Enumerable.Empty<XElement>();
+    }
+
     private static void Merge(Node parent, XElement element, int fileNo)
     {
         var node = GetOrAdd(parent, element.Name.LocalName, FieldKind.Element);
@@ -97,7 +119,6 @@ public static class XmlComparer
 
         results.Add(new FieldResult(path, node.Name, node.Kind, depth, node.InFile1, node.InFile2));
 
-        // Attributes first, then child elements
         foreach (var child in node.Children.Where(c => c.Kind == FieldKind.Attribute))
             Flatten(child, path, depth + 1, results);
         foreach (var child in node.Children.Where(c => c.Kind == FieldKind.Element))
